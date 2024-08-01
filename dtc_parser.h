@@ -15,7 +15,9 @@
 #include <stdint.h>
 
 #define MAX_CONCURRENT_MULTIFRAME 4    // Maximum concurrent multi-frame messages
-#define MAX_MULTIFRAME_DATA_SIZE 512  // Maximum data size for multi-frame messages
+#define MAX_MULTIFRAME_DATA_SIZE 512   // Maximum data size for multi-frame messages
+#define MAX_CANDIDATE_FAULTS 50        // Maximum number of candidate faults
+#define MAX_ACTIVE_FAULTS 20           // Maximum number of active faults
 
 /**
  * @brief Enum for fault status
@@ -46,21 +48,6 @@ typedef struct {
 } Fault;
 
 /**
- * @brief Node in the linked list of faults
- */
-typedef struct FaultNode {
-    Fault fault;
-    struct FaultNode* next;
-} FaultNode;
-
-/**
- * @brief Linked list of faults
- */
-typedef struct {
-    FaultNode* head;
-} FaultList;
-
-/**
  * @brief Struct for a multi-frame message
  */
 typedef struct {
@@ -75,14 +62,14 @@ typedef struct {
 /**
  * @brief Callback type for active faults
  */
-typedef void (*ActiveFaultsCallback)(FaultList* active_faults);
+typedef void (*ActiveFaultsCallback)(Fault* active_faults, size_t active_faults_count);
 
 /**
  * @brief Sets the debounce times for faults
  *
- * @param active_time Debounce time for a fault to become active (in seconds)
+ * @param active_time Debounce time for a fault to become active (in milliseconds)
  * @param active_count Number of occurrences for a fault to become active
- * @param inactive_time Debounce time for a fault to become inactive (in seconds)
+ * @param inactive_time Debounce time for a fault to become inactive (in milliseconds)
  */
 void set_debounce_times(uint32_t active_time, uint32_t active_count, uint32_t inactive_time);
 
@@ -103,10 +90,18 @@ void register_active_faults_callback(ActiveFaultsCallback callback);
 void process_can_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp);
 
 /**
+ * @brief Check faults
+ *
+ * @param timestamp Current timestamp in seconds
+ */
+void check_faults(uint32_t timestamp);
+
+/**
  * @brief Prints the fault list
  *
  * @param list Fault list to be printed
+ * @param count Number of faults in the list
  */
-void print_faults(FaultList* list);
+void print_faults(Fault* list, size_t count);
 
 #endif // DTC_PARSER_H
