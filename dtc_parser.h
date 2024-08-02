@@ -20,15 +20,6 @@
 #define MAX_ACTIVE_FAULTS 20           // Maximum number of active faults
 
 /**
- * @brief Enum for fault status
- */
-typedef enum {
-    FAULT_CANDIDATE,
-    FAULT_ACTIVE,
-    FAULT_INACTIVE
-} FaultStatus;
-
-/**
  * @brief Struct for a fault
  */
 typedef struct {
@@ -44,7 +35,6 @@ typedef struct {
     uint32_t first_seen;
     uint32_t last_seen;
     uint32_t occurrences;
-    FaultStatus status;
 } Fault;
 
 /**
@@ -67,11 +57,11 @@ typedef void (*ActiveFaultsCallback)(Fault* active_faults, size_t active_faults_
 /**
  * @brief Sets the debounce times for faults
  *
- * @param active_time Debounce time for a fault to become active (in milliseconds)
  * @param active_count Number of occurrences for a fault to become active
- * @param inactive_time Debounce time for a fault to become inactive (in milliseconds)
+ * @param active_time Debounce time for a fault to become active (in seconds)
+ * @param inactive_time Debounce time for a fault to become inactive (in seconds)
  */
-void set_debounce_times(uint32_t active_time, uint32_t active_count, uint32_t inactive_time);
+void set_debounce_times(uint32_t active_count, uint32_t active_time, uint32_t inactive_time);
 
 /**
  * @brief Registers a callback function for active fault notifications
@@ -90,7 +80,7 @@ void register_active_faults_callback(ActiveFaultsCallback callback);
 void process_can_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp);
 
 /**
- * @brief Check faults
+ * @brief Check faults, must be called periodically by the user's application
  *
  * @param timestamp Current timestamp in seconds
  */

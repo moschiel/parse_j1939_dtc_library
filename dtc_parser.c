@@ -14,6 +14,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Print controls
+#define PRINT_DM1_FRAME 0
+#define PRINT_DM1_PARSED 0
+#define PRINT_NEW_AND_REMOVED_DTC 1
+
 // Private variables
 static Fault candidate_faults[MAX_CANDIDATE_FAULTS];
 static size_t candidate_faults_count = 0;
@@ -38,7 +43,7 @@ static void handle_tp_dt_message(uint32_t can_id, uint8_t data[8], uint32_t time
 static MultiFrameMessage* find_multi_frame_message(uint32_t message_id);
 static void remove_multi_frame_message(uint32_t message_id);
 
-void set_debounce_times(uint32_t active_time, uint32_t active_count, uint32_t inactive_time) {
+void set_debounce_times(uint32_t active_count, uint32_t active_time, uint32_t inactive_time) {
     debounce_fault_active_time = active_time;
     debounce_fault_active_count = active_count;
     debounce_fault_inactive = inactive_time;
@@ -52,18 +57,19 @@ void process_can_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
     if ((can_id & 0x00FFFF00) == 0x00FECA00) { // single frame DM1 message
         process_dm1_message(can_id, data, 8, timestamp);
     } 
-    else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
-        handle_tp_cm_message(can_id, data, timestamp);
-    } 
-    else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
-        handle_tp_dt_message(can_id, data, timestamp);
-    }
+    // else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
+    //     handle_tp_cm_message(can_id, data, timestamp);
+    // } 
+    // else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
+    //     handle_tp_dt_message(can_id, data, timestamp);
+    // }
 }
 
 void print_faults(Fault* list, size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        Fault* fault = &list[i];
-        printf("SRC: 0x%X, SPN: %u, FMI: %u, Status: %d\n", fault->src, fault->spn, fault->fmi, fault->status);
+        Fault* f = &list[i];
+        printf("LastSeen: %u, SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u, MIL: %u, RSL: %u, AWL: %u, PL: %u\n", 
+            f->last_seen, f->src, f->src, f->spn, f->spn, f->fmi, f->cm, f->oc, f->mil, f->rsl, f->awl, f->pl);
     }
 }
 
@@ -93,6 +99,12 @@ static void remove_inactive_faults(uint32_t timestamp) {
     // Check active faults to be removed
     for (size_t i = 0; i < active_faults_count; ++i) {
         if (timestamp - active_faults[i].last_seen > debounce_fault_inactive) {
+            #if PRINT_NEW_AND_REMOVED_DTC
+            Fault f = active_faults[i];
+            printf("[%u] Removed fault -> SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u\n",
+                f.first_seen, f.src, f.src, f.spn, f.spn, f.fmi);
+            #endif
+
             // Shift remaining faults
             for (size_t j = i; j < active_faults_count - 1; ++j) {
                 active_faults[j] = active_faults[j + 1];
@@ -104,7 +116,6 @@ static void remove_inactive_faults(uint32_t timestamp) {
     }
 }
 
-
 static void add_candidate_fault(Fault fault) {
     if (candidate_faults_count < MAX_CANDIDATE_FAULTS) {
         candidate_faults[candidate_faults_count++] = fault;
@@ -114,6 +125,11 @@ static void add_candidate_fault(Fault fault) {
 static void add_active_fault(Fault fault) {
     if (active_faults_count < MAX_ACTIVE_FAULTS) {
         active_faults[active_faults_count++] = fault;
+
+        #if PRINT_NEW_AND_REMOVED_DTC
+        printf("[%u] New fault -> SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u\n",
+            fault.first_seen, fault.src, fault.src, fault.spn, fault.spn, fault.fmi);
+        #endif
     }
 }
 
@@ -131,7 +147,7 @@ static void update_fault_status(uint32_t timestamp) {
     for (size_t i = 0; i < candidate_faults_count; ++i) {
         if ((timestamp - candidate_faults[i].first_seen <= debounce_fault_active_time) && 
             (candidate_faults[i].occurrences >= debounce_fault_active_count)) {
-            candidate_faults[i].status = FAULT_ACTIVE;
+            // candidate_faults[i].status = FAULT_ACTIVE;
             add_active_fault(candidate_faults[i]);
 
             // Remove from candidates
@@ -146,8 +162,12 @@ static void update_fault_status(uint32_t timestamp) {
 }
 
 static void process_dm1_message(uint32_t can_id, uint8_t* data, uint32_t length, uint32_t timestamp) {
+    if(length < 6) return;
+
+    uint32_t spn = (((data[4] >> 5) & 0x7) << 16) | ((data[3] << 8) & 0xFF00) | data[2];
+    if(spn == 0) return;
+    
     uint32_t src = can_id & 0xFF;
-    uint32_t spn;
     uint32_t fmi;
     uint8_t cm;
     uint8_t oc;
@@ -156,11 +176,30 @@ static void process_dm1_message(uint32_t can_id, uint8_t* data, uint32_t length,
     uint8_t awl = (data[0] >> 2) & 0x03;
     uint8_t pl = data[0] & 0x03;
 
+    #if PRINT_DM1_FRAME
+    printf("[%u] DM1_FRAME -> ID: %08X, Data: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+        timestamp,
+        can_id, 
+        data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+    #endif
+
+    #if PRINT_DM1_PARSED
+    printf("[%u] DM1_PARSED -> SRC: 0x%02X (%u), MIL: %u, RSL: %u, AWL: %u, PL: %u\n",
+        timestamp, src, src, mil, rsl, awl, pl);
+    int f = 1;
+    #endif
+
     for (uint32_t i = 2; i < (length-2); i += 4) {
         spn = (((data[i + 2] >> 5) & 0x7) << 16) | ((data[i + 1] << 8) & 0xFF00) | data[i];
         fmi = data[i + 2] & 0x1F;
         cm = (data[i + 3] >> 7) & 0x01;
         oc = data[i + 3] & 0x7F;
+
+        #if PRINT_DM1_PARSED
+        printf("        DTC[%u] -> SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u\n",
+            f, spn, spn, fmi, cm, oc);
+        f++;
+        #endif
 
         Fault* existing_fault = find_fault(active_faults, active_faults_count, src, spn, fmi);
         if (existing_fault) {
@@ -171,7 +210,7 @@ static void process_dm1_message(uint32_t can_id, uint8_t* data, uint32_t length,
             existing_fault->pl = pl;
             existing_fault->last_seen = timestamp;
         } else {
-            Fault new_fault = {src, spn, fmi, cm, oc, mil, rsl, awl, pl, timestamp, timestamp, 1, FAULT_CANDIDATE};
+            Fault new_fault = {src, spn, fmi, cm, oc, mil, rsl, awl, pl, timestamp, timestamp, 1};
             add_candidate_fault(new_fault);
         }
     }
