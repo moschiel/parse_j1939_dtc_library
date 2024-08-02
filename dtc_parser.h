@@ -23,19 +23,21 @@
  * @brief Struct for a fault
  */
 typedef struct {
-    uint32_t src;
-    uint32_t spn;
-    uint32_t fmi;
-    uint8_t cm;
-    uint8_t oc;
-    uint8_t mil;
-    uint8_t rsl;
-    uint8_t awl;
-    uint8_t pl;
+    uint8_t src;
+    struct {
+        uint8_t mil:2;      // Malfunction Indicator Lamp
+        uint8_t rsl:2;      // Red Stop Lamp
+        uint8_t awl:2;      // Amber Warning Lamp
+        uint8_t pl:2;       // Protect Lamp status
+        uint32_t spn:19;    // Suspect Number Parameter
+        uint8_t fmi:5;      // Failure Module Indicator
+        uint8_t cm:1;       // Conversion Method
+        uint8_t oc:7;       // Occurrence Counter 
+    } __attribute__((packed)); //DM1 (4 bytes)
     uint32_t first_seen;
     uint32_t last_seen;
-    uint32_t occurrences;
-} Fault;
+    uint16_t occurrences;
+} __attribute__((packed)) Fault;
 
 /**
  * @brief Struct for a multi-frame message

@@ -25,8 +25,8 @@ static size_t candidate_faults_count = 0;
 static Fault active_faults[MAX_ACTIVE_FAULTS];
 static size_t active_faults_count = 0;
 static MultiFrameMessage multi_frame_messages[MAX_CONCURRENT_MULTIFRAME];
-static uint32_t debounce_fault_active_time = 10;
 static uint32_t debounce_fault_active_count = 3;
+static uint32_t debounce_fault_active_time = 10;
 static uint32_t debounce_fault_inactive = 20;
 static ActiveFaultsCallback active_faults_callback = NULL;
 static uint8_t changedFaultList = 0;
@@ -44,8 +44,8 @@ static MultiFrameMessage* find_multi_frame_message(uint32_t message_id);
 static void remove_multi_frame_message(uint32_t message_id);
 
 void set_debounce_times(uint32_t active_count, uint32_t active_time, uint32_t inactive_time) {
-    debounce_fault_active_time = active_time;
     debounce_fault_active_count = active_count;
+    debounce_fault_active_time = active_time;
     debounce_fault_inactive = inactive_time;
 }
 
@@ -125,6 +125,7 @@ static void add_candidate_fault(Fault fault) {
 static void add_active_fault(Fault fault) {
     if (active_faults_count < MAX_ACTIVE_FAULTS) {
         active_faults[active_faults_count++] = fault;
+        changedFaultList = 1;
 
         #if PRINT_NEW_AND_REMOVED_DTC
         printf("[%u] New fault -> SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u\n",
@@ -156,7 +157,6 @@ static void update_fault_status(uint32_t timestamp) {
             }
             --candidate_faults_count;
             --i; // recheck the current index
-            changedFaultList = 1;
         }
     }
 }
@@ -210,7 +210,20 @@ static void process_dm1_message(uint32_t can_id, uint8_t* data, uint32_t length,
             existing_fault->pl = pl;
             existing_fault->last_seen = timestamp;
         } else {
-            Fault new_fault = {src, spn, fmi, cm, oc, mil, rsl, awl, pl, timestamp, timestamp, 1};
+            Fault new_fault = {
+                .src = src, 
+                .spn = spn, 
+                .fmi = fmi, 
+                .cm = cm, 
+                .oc = oc, 
+                .mil = mil, 
+                .rsl = rsl, 
+                .awl = awl, 
+                .pl = pl, 
+                .first_seen = timestamp, 
+                .last_seen = timestamp, 
+                .occurrences = 1
+            };
             add_candidate_fault(new_fault);
         }
     }
@@ -222,23 +235,29 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
     uint32_t message_id = can_id & 0x1FFFFFFF;
     uint32_t pgn = (data[7] << 16) | (data[6] << 8) | data[5];
 
-    if (pgn == 0xFECA) { // Multiframe DTC
-        uint8_t control_byte = data[0];
+    if (pgn != 0xFECA) return; //If it is not a DTC multiframe, return
 
-        if (control_byte == 0x20) { // BAM message
-            uint32_t total_size = (data[2] << 8) | data[1];
-            uint32_t num_packets = data[3];
+    uint8_t control_byte = data[0];
 
-            for (int i = 0; i < MAX_CONCURRENT_MULTIFRAME; i++) {
-                if (multi_frame_messages[i].message_id == 0) {
-                    multi_frame_messages[i].message_id = message_id;
-                    multi_frame_messages[i].message_id_tp_ct = (message_id & 0xFFFF00FF) | 0xEB00; // TP.CT version of the TP.CM message
-                    multi_frame_messages[i].total_size = total_size;
-                    multi_frame_messages[i].num_packets = num_packets;
-                    multi_frame_messages[i].received_packets = 0;
-                    memset(multi_frame_messages[i].data, 0, MAX_MULTIFRAME_DATA_SIZE);
-                    break;
-                }
+    if (control_byte == 0x20) { // BAM message
+        uint32_t total_size = (data[2] << 8) | data[1];
+        uint32_t num_packets = data[3];
+
+        for (int i = 0; i < MAX_CONCURRENT_MULTIFRAME; i++) {
+            if (multi_frame_messages[i].message_id == message_id) {
+
+            }
+        }
+
+        for (int i = 0; i < MAX_CONCURRENT_MULTIFRAME; i++) {
+            if (multi_frame_messages[i].message_id == 0) {
+                multi_frame_messages[i].message_id = message_id;
+                multi_frame_messages[i].message_id_tp_ct = (message_id & 0xFF00FFFF) | 0xEB0000; // TP.CT version of the TP.CM message
+                multi_frame_messages[i].total_size = total_size;
+                multi_frame_messages[i].num_packets = num_packets;
+                multi_frame_messages[i].received_packets = 0;
+                memset(multi_frame_messages[i].data, 0, MAX_MULTIFRAME_DATA_SIZE);
+                break;
             }
         }
     }

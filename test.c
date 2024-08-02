@@ -39,10 +39,6 @@ void process_asc_file(const char* file_path) {
             char can_id_str[10];
             uint8_t data_bytes[8];
 
-            if(strstr(line, "301.503431")) {
-                printf("301\n");
-            }
-
             // Parse the line to extract CAN frame information
             // Example line format: "   6.474846 1  18FECA03x       Rx   d 8 04 FF 22 EE E3 81 FF FF  Length = 559804 BitCount = 144 ID = 419351043x"
             if (sscanf(line, "%lf %s %s %*s %*s %*s %x %hhx %hhx %hhx %hhx %hhx %hhx %hhx %hhx",
@@ -71,7 +67,7 @@ int main() {
     register_active_faults_callback(active_faults_callback);
 
     // Set debounce times
-    set_debounce_times(1, 10, 20);
+    set_debounce_times(1, 10, 1);
 
     // Process the .asc file
     // const char* file_path = "canalyzer_logs/test.asc";
