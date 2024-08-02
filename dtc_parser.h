@@ -44,7 +44,7 @@ typedef struct {
  */
 typedef struct {
     uint32_t message_id;
-    uint32_t message_id_tp_ct;
+    uint32_t message_id_tp_dt;
     uint32_t total_size;
     uint32_t num_packets;
     uint32_t received_packets;

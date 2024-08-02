@@ -67,12 +67,12 @@ int main() {
     register_active_faults_callback(active_faults_callback);
 
     // Set debounce times
-    set_debounce_times(1, 10, 1);
+    set_debounce_times(10, 10, 10);
 
     // Process the .asc file
     // const char* file_path = "canalyzer_logs/test.asc";
-    // const char* file_path = "canalyzer_logs/VWConstel2024_1.asc";
-    const char* file_path = "canalyzer_logs/VWConstel2024_2.asc";
+    const char* file_path = "canalyzer_logs/VWConstel2024_1.asc";
+    // const char* file_path = "canalyzer_logs/VWConstel2024_2.asc";
     process_asc_file(file_path);
 
     return 0;
