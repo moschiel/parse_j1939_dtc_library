@@ -8,7 +8,7 @@
  * @date 2024
  */
 
-#include "dtc_parser.h"
+#include "dtc_parser/dtc_parser.h"
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>
@@ -28,6 +28,7 @@ void process_asc_file(const char* file_path) {
         perror("Failed to open file");
         return;
     }
+    uint32_t last_timestamp = 0;
 
     char line[MAX_LINE_LENGTH];
     while (fgets(line, sizeof(line), file)) {
@@ -52,9 +53,15 @@ void process_asc_file(const char* file_path) {
 
                 // Process the CAN frame
                 process_can_frame(can_id, data_bytes, timestamp);
+            }
+            else if(sscanf(line, "%lf ", &double_timestamp) == 1) {
+                timestamp = (unsigned int)double_timestamp;
+            }
 
-                // Must be called periodically by the user's application
-                check_faults(timestamp);
+            //Check if it has passed 1 second
+            if(timestamp - last_timestamp >= 1) {
+                check_faults(timestamp); // 'check_faults' must be called periodically by the user's application
+                last_timestamp = timestamp;
             }
         }
     }

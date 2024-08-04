@@ -10,7 +10,7 @@
                 "-o",
                 "test_program",
                 "test.c",
-                "dtc_parser.c"
+                "dtc_parser\\dtc_parser.c"
             ],
             "group": "build",
             "problemMatcher": [

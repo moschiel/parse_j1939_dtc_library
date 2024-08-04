@@ -195,7 +195,7 @@ static void update_fault_status(uint32_t timestamp, uint8_t src, uint32_t spn, u
                 .first_seen = timestamp, 
                 .last_seen = timestamp, 
                 .occurrences = 1
-            };
+            };    
             add_candidate_fault(new_fault);
         }
     }
@@ -220,7 +220,7 @@ static void process_dm1_message(uint32_t can_id, uint8_t* data, uint32_t length,
 
     uint32_t spn = (((data[4] >> 5) & 0x7) << 16) | ((data[3] << 8) & 0xFF00) | data[2];
     if(spn == 0) return;
-    
+
     uint8_t src = can_id & 0xFF;
     uint8_t fmi;
     uint8_t cm;
