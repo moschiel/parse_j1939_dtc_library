@@ -34,6 +34,7 @@ static MultiFrameMessage multi_frame_messages[MAX_CONCURRENT_MULTIFRAME];
 static uint32_t debounce_fault_active_count = 3;
 static uint32_t debounce_fault_active_time = 10;
 static uint32_t debounce_fault_inactive = 20;
+static uint32_t timeout_multi_frame = 5;
 static ActiveFaultsCallback active_faults_callback = NULL;
 static uint8_t changedFaultList = 0;
 
@@ -48,6 +49,7 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
 static void handle_tp_dt_message(uint32_t can_id, uint8_t data[8], uint32_t timestamp);
 static MultiFrameMessage* find_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_multi_frame_message(uint32_t message_id_tp_dt);
+static void remove_incomplete_multi_frame_message(uint32_t timestamp);
 
 void set_debounce_times(uint32_t active_count, uint32_t active_time, uint32_t inactive_time) {
     debounce_fault_active_count = active_count;
@@ -87,6 +89,7 @@ void print_faults(Fault* list, size_t count) {
 
 void check_faults(uint32_t timestamp) {
     remove_inactive_faults(timestamp);
+    remove_incomplete_multi_frame_message(timestamp);
     // Notify via callback
     if (changedFaultList && active_faults_callback != NULL) {
         changedFaultList = 0;
@@ -274,6 +277,11 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
             timestamp, can_id, total_size, num_packets);
         #endif
 
+        if(total_size > MAX_MULTIFRAME_DATA_SIZE) {
+            printf("[%u] Cannot exceed MAX_MULTIFRAME_DATA_SIZE: %u\n", timestamp, MAX_MULTIFRAME_DATA_SIZE);
+            return;
+        }
+
         int8_t k = -1; // Point to available slot
 
         // "TP.CM" is the anouncement of a new multiframe BAM message, 
@@ -301,6 +309,8 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
             multi_frame_messages[k].total_size = total_size;
             multi_frame_messages[k].num_packets = num_packets;
             multi_frame_messages[k].received_packets = 0;
+            multi_frame_messages[k].first_seen = timestamp;
+            multi_frame_messages[k].last_seen = timestamp;
             memset(multi_frame_messages[k].data, 0, MAX_MULTIFRAME_DATA_SIZE);
         } else {
             printf("WARNING: Cannot exceed MAX_CONCURRENT_MULTIFRAME: %u\n", MAX_CONCURRENT_MULTIFRAME);
@@ -340,6 +350,7 @@ static void handle_tp_dt_message(uint32_t can_id, uint8_t data[8], uint32_t time
         uint32_t offset = (packet_number - 1) * 7;
         memcpy(&message->data[offset], &data[1], 7);
         message->received_packets++;
+        message->last_seen = timestamp;
 
         if (message->received_packets == message->num_packets) {
             #if PRINT_TP_CONCAT_MULTI_FRAME
@@ -373,3 +384,14 @@ static void remove_multi_frame_message(uint32_t message_id_tp_dt) {
     }
 }
 
+static void remove_incomplete_multi_frame_message(uint32_t timestamp) {
+    for (uint32_t i = 0; i < MAX_CONCURRENT_MULTIFRAME; i++) {
+        if(multi_frame_messages[i].message_id) {
+            if ((timestamp - multi_frame_messages[i].last_seen) > timeout_multi_frame) {
+                printf("[%u] discard incomplete multiframe, CM: 0x%X, DT: 0x%X, FirstSeen: %u, LastSeen: %u\n", 
+                    timestamp, multi_frame_messages[i].message_id, multi_frame_messages[i].message_id_tp_dt, multi_frame_messages[i].first_seen, multi_frame_messages[i].last_seen);
+                memset(&multi_frame_messages[i], 0, sizeof(MultiFrameMessage));
+            }
+        }
+    }
+}

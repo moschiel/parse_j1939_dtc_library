@@ -15,8 +15,8 @@
 #include <stdint.h>
 
 #define MAX_CONCURRENT_MULTIFRAME 4    // Maximum concurrent multi-frame messages
-#define MAX_MULTIFRAME_DATA_SIZE 512   // Maximum data size for multi-frame messages
-#define MAX_CANDIDATE_FAULTS 50        // Maximum number of candidate faults
+#define MAX_MULTIFRAME_DATA_SIZE 256   // Maximum data size for multi-frame messages
+#define MAX_CANDIDATE_FAULTS 40        // Maximum number of candidate faults
 #define MAX_ACTIVE_FAULTS 20           // Maximum number of active faults
 
 /**
@@ -48,6 +48,8 @@ typedef struct {
     uint32_t total_size;
     uint32_t num_packets;
     uint32_t received_packets;
+    uint32_t first_seen;
+    uint32_t last_seen;
     uint8_t data[MAX_MULTIFRAME_DATA_SIZE];
 } MultiFrameMessage;
 
