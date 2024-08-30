@@ -84,7 +84,7 @@ void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestam
 
 void print_j1939_faults(const Fault* list, const size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        Fault* f = &list[i];
+        const Fault* f = &list[i];
         printf("LastSeen: %u, SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u, MIL: %u, RSL: %u, AWL: %u, PL: %u\n", 
             f->last_seen, f->src, f->src, f->spn, f->spn, f->fmi, f->cm, f->oc, f->mil, f->rsl, f->awl, f->pl);
     }
