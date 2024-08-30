@@ -74,7 +74,7 @@ int main() {
     register_j1939_faults_callback(active_faults_callback);
 
     // Set debounce times
-    set_j1939_fault_debounce(10, 10, 10);
+    set_j1939_fault_debounce(10, 10, 10, 5);
 
     // Process the .asc file
     // const char* file_path = "canalyzer_logs/test.asc";
