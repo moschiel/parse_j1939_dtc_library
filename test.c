@@ -17,9 +17,9 @@
 
 #define MAX_LINE_LENGTH 256
 
-void active_faults_callback(Fault* active_faults, size_t active_faults_count) {
-    // printf("Active Faults Updated:\n");
-    // print_faults(active_faults, active_faults_count);
+void active_faults_callback(const Fault* active_faults, const size_t active_faults_count) {
+    //printf("Active Faults Updated:\n");
+    //print_j1939_faults(active_faults, active_faults_count);
 }
 
 void process_asc_file(const char* file_path) {

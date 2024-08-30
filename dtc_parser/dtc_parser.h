@@ -56,7 +56,7 @@ typedef struct {
 /**
  * @brief Callback type for active faults
  */
-typedef void (*ActiveFaultsCallback)(Fault* active_faults, size_t active_faults_count);
+typedef void (*ActiveFaultsCallback)(const Fault* active_faults, const size_t active_faults_count);
 
 /**
  * @brief Sets the debounce times for faults
@@ -97,6 +97,6 @@ void check_j1939_faults(uint32_t timestamp);
  * @param list Fault list to be printed
  * @param count Number of faults in the list
  */
-void print_j1939_faults(Fault* list, size_t count);
+void print_j1939_faults(const Fault* list, const size_t count);
 
 #endif // DTC_PARSER_H
