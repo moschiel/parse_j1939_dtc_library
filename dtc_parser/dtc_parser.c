@@ -24,6 +24,8 @@
 #define PRINT_TP_DT_INCORRECT_ORDER 0
 #define PRINT_TP_CONCAT_MULTI_FRAME 0
 #define PRINT_NEW_AND_REMOVED_DTC 1
+#define PRINT_WARNINGS 1
+
 
 // Private variables
 static Fault candidate_faults[MAX_CANDIDATE_FAULTS];
@@ -51,17 +53,17 @@ static MultiFrameMessage* find_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_incomplete_multi_frame_message(uint32_t timestamp);
 
-void set_debounce_times(uint32_t active_count, uint32_t active_time, uint32_t inactive_time) {
+void set_j1939_fault_debounce(uint32_t active_count, uint32_t active_time, uint32_t inactive_time) {
     debounce_fault_active_count = active_count;
     debounce_fault_active_time = active_time;
     debounce_fault_inactive = inactive_time;
 }
 
-void register_active_faults_callback(ActiveFaultsCallback callback) {
+void register_j1939_faults_callback(ActiveFaultsCallback callback) {
     active_faults_callback = callback;
 }
 
-void process_can_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
+void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
     if ((can_id & 0x00FFFF00) == 0x00FECA00) { // single frame DM1 message
         #if PRINT_DM1_FRAME
         printf("[%u] DM1_FRAME -> ID: %08X, Data: %02X %02X %02X %02X %02X %02X %02X %02X\n",
@@ -79,7 +81,7 @@ void process_can_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
     }
 }
 
-void print_faults(Fault* list, size_t count) {
+void print_j1939_faults(Fault* list, size_t count) {
     for (size_t i = 0; i < count; ++i) {
         Fault* f = &list[i];
         printf("LastSeen: %u, SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u, MIL: %u, RSL: %u, AWL: %u, PL: %u\n", 
@@ -87,7 +89,7 @@ void print_faults(Fault* list, size_t count) {
     }
 }
 
-void check_faults(uint32_t timestamp) {
+void check_j1939_faults(uint32_t timestamp) {
     remove_inactive_faults(timestamp);
     remove_incomplete_multi_frame_message(timestamp);
     // Notify via callback
@@ -135,7 +137,9 @@ static void add_candidate_fault(Fault fault) {
     if (candidate_faults_count < MAX_CANDIDATE_FAULTS) {
         candidate_faults[candidate_faults_count++] = fault;
     } else {
+        #if PRINT_WARNINGS
         printf("WARNING: Cannot exceed MAX_CANDIDATE_FAULTS: %u\n", MAX_CANDIDATE_FAULTS);
+        #endif
     }
 }
 
@@ -149,7 +153,9 @@ static void add_active_fault(Fault fault) {
             fault.last_seen, fault.src, fault.src, fault.spn, fault.spn, fault.fmi);
         #endif
     } else {
+        #if PRINT_WARNINGS
         printf("WARNING: Cannot exceed MAX_ACTIVE_FAULTS: %u", MAX_ACTIVE_FAULTS);
+        #endif
     }
 }
 
@@ -278,7 +284,9 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
         #endif
 
         if(total_size > MAX_MULTIFRAME_DATA_SIZE) {
-            printf("[%u] Cannot exceed MAX_MULTIFRAME_DATA_SIZE: %u\n", timestamp, MAX_MULTIFRAME_DATA_SIZE);
+            #if PRINT_WARNINGS
+            printf("[%u] WARNING: Cannot exceed MAX_MULTIFRAME_DATA_SIZE: %u\n", timestamp, MAX_MULTIFRAME_DATA_SIZE);
+            #endif
             return;
         }
 
@@ -313,10 +321,14 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
             multi_frame_messages[k].last_seen = timestamp;
             memset(multi_frame_messages[k].data, 0, MAX_MULTIFRAME_DATA_SIZE);
         } else {
-            printf("WARNING: Cannot exceed MAX_CONCURRENT_MULTIFRAME: %u\n", MAX_CONCURRENT_MULTIFRAME);
+            #if PRINT_WARNINGS
+            printf("[%u] WARNING: Cannot exceed MAX_CONCURRENT_MULTIFRAME: %u\n", timestamp, MAX_CONCURRENT_MULTIFRAME);
+            #endif
         }
     } else {
-        printf("[%u] NOT BAM MESSAGE\n", timestamp);
+        #if PRINT_WARNINGS
+        printf("[%u] WARNING: NOT BAM MESSAGE\n", timestamp);
+        #endif
     }
 }
 
@@ -388,8 +400,10 @@ static void remove_incomplete_multi_frame_message(uint32_t timestamp) {
     for (uint32_t i = 0; i < MAX_CONCURRENT_MULTIFRAME; i++) {
         if(multi_frame_messages[i].message_id) {
             if ((timestamp - multi_frame_messages[i].last_seen) > timeout_multi_frame) {
-                printf("[%u] discard incomplete multiframe, CM: 0x%X, DT: 0x%X, FirstSeen: %u, LastSeen: %u\n", 
+                #if PRINT_WARNINGS
+                printf("[%u] WARNING: discard incomplete multiframe, CM: 0x%X, DT: 0x%X, FirstSeen: %u, LastSeen: %u\n", 
                     timestamp, multi_frame_messages[i].message_id, multi_frame_messages[i].message_id_tp_dt, multi_frame_messages[i].first_seen, multi_frame_messages[i].last_seen);
+                #endif
                 memset(&multi_frame_messages[i], 0, sizeof(MultiFrameMessage));
             }
         }

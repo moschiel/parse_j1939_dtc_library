@@ -23,7 +23,7 @@
  * @brief Struct for a fault
  */
 typedef struct {
-    uint8_t src;
+    uint8_t src;            // Source
     struct {
         uint8_t mil:2;      // Malfunction Indicator Lamp
         uint8_t rsl:2;      // Red Stop Lamp
@@ -33,11 +33,11 @@ typedef struct {
         uint8_t fmi:5;      // Failure Module Indicator
         uint8_t cm:1;       // Conversion Method
         uint8_t oc:7;       // Occurrence Counter 
-    } __attribute__((packed)); //DM1 (4 bytes)
+    } __attribute__((packed)); // DM1 (5 bytes)
     uint32_t first_seen;
     uint32_t last_seen;
     uint16_t occurrences;
-} __attribute__((packed)) Fault;
+} __attribute__((packed)) Fault; // Fault (6 bytes)
 
 /**
  * @brief Struct for a multi-frame message
@@ -65,14 +65,14 @@ typedef void (*ActiveFaultsCallback)(Fault* active_faults, size_t active_faults_
  * @param active_time Debounce time for a fault to become active (in seconds)
  * @param inactive_time Debounce time for a fault to become inactive (in seconds)
  */
-void set_debounce_times(uint32_t active_count, uint32_t active_time, uint32_t inactive_time);
+void set_j1939_fault_debounce(uint32_t active_count, uint32_t active_time, uint32_t inactive_time);
 
 /**
  * @brief Registers a callback function for active fault notifications
  *
  * @param callback Callback function to be called when active faults are updated
  */
-void register_active_faults_callback(ActiveFaultsCallback callback);
+void register_j1939_faults_callback(ActiveFaultsCallback callback);
 
 /**
  * @brief Processes a CAN message and updates faults
@@ -81,14 +81,14 @@ void register_active_faults_callback(ActiveFaultsCallback callback);
  * @param data CAN message data
  * @param timestamp Timestamp of the message in seconds
  */
-void process_can_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp);
+void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp);
 
 /**
  * @brief Check faults, must be called periodically by the user's application
  *
  * @param timestamp Current timestamp in seconds
  */
-void check_faults(uint32_t timestamp);
+void check_j1939_faults(uint32_t timestamp);
 
 /**
  * @brief Prints the fault list
@@ -96,6 +96,6 @@ void check_faults(uint32_t timestamp);
  * @param list Fault list to be printed
  * @param count Number of faults in the list
  */
-void print_faults(Fault* list, size_t count);
+void print_j1939_faults(Fault* list, size_t count);
 
 #endif // DTC_PARSER_H
