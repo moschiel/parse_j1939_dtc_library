@@ -61,11 +61,12 @@ typedef void (*ActiveFaultsCallback)(Fault* active_faults, size_t active_faults_
 /**
  * @brief Sets the debounce times for faults
  *
- * @param active_count Number of occurrences for a fault to become active
- * @param active_time Debounce time for a fault to become active (in seconds)
- * @param inactive_time Debounce time for a fault to become inactive (in seconds)
+ * @param _fault_active_count_ Number of occurrences that must occur within a time window for a fault to become active
+ * @param _fault_active_time_window_ Time window for a fault to become active (in seconds)
+ * @param _debounce_fault_inactive_time_ Remove faults that have not been updated by this amount of time (seconds)
+ * @param _timeout_multi_frame_ Maximum time to receive a complete multiframe message, otherwise discards the message
  */
-void set_j1939_fault_debounce(uint32_t active_count, uint32_t active_time, uint32_t inactive_time);
+void set_j1939_fault_debounce(uint32_t _fault_active_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_);
 
 /**
  * @brief Registers a callback function for active fault notifications

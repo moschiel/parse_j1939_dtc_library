@@ -33,9 +33,9 @@ static size_t candidate_faults_count = 0;
 static Fault active_faults[MAX_ACTIVE_FAULTS];
 static size_t active_faults_count = 0;
 static MultiFrameMessage multi_frame_messages[MAX_CONCURRENT_MULTIFRAME];
-static uint32_t debounce_fault_active_count = 3;
-static uint32_t debounce_fault_active_time = 10;
-static uint32_t debounce_fault_inactive = 20;
+static uint32_t fault_active_count = 3;
+static uint32_t fault_active_time_window = 10;
+static uint32_t debounce_fault_inactive_time = 20;
 static uint32_t timeout_multi_frame = 5;
 static ActiveFaultsCallback active_faults_callback = NULL;
 static uint8_t changedFaultList = 0;
@@ -53,10 +53,11 @@ static MultiFrameMessage* find_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_incomplete_multi_frame_message(uint32_t timestamp);
 
-void set_j1939_fault_debounce(uint32_t active_count, uint32_t active_time, uint32_t inactive_time) {
-    debounce_fault_active_count = active_count;
-    debounce_fault_active_time = active_time;
-    debounce_fault_inactive = inactive_time;
+void set_j1939_fault_debounce(uint32_t _fault_active_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_) {
+    fault_active_count = _fault_active_count_;
+    fault_active_time_window = _fault_active_time_window_;
+    debounce_fault_inactive_time = _debounce_fault_inactive_time_;
+    timeout_multi_frame = _timeout_multi_frame_;
 }
 
 void register_j1939_faults_callback(ActiveFaultsCallback callback) {
@@ -103,7 +104,7 @@ void check_j1939_faults(uint32_t timestamp) {
 static void remove_inactive_faults(uint32_t timestamp) {
     // Check candidate faults to be removed
     for (size_t i = 0; i < candidate_faults_count; ++i) {
-        if ((timestamp - candidate_faults[i].first_seen) > debounce_fault_active_time) {
+        if ((timestamp - candidate_faults[i].first_seen) > fault_active_time_window) {
             // Shift remaining faults
             for (size_t j = i; j < candidate_faults_count - 1; ++j) {
                 candidate_faults[j] = candidate_faults[j + 1];
@@ -115,7 +116,7 @@ static void remove_inactive_faults(uint32_t timestamp) {
 
     // Check active faults to be removed
     for (size_t i = 0; i < active_faults_count; ++i) {
-        if ((timestamp - active_faults[i].last_seen) > debounce_fault_inactive) {
+        if ((timestamp - active_faults[i].last_seen) > debounce_fault_inactive_time) {
             #if PRINT_NEW_AND_REMOVED_DTC
             Fault f = active_faults[i];
             printf("[%u] Removed fault -> SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, LastSeen: %u\n",
@@ -211,8 +212,8 @@ static void update_fault_status(uint32_t timestamp, uint8_t src, uint32_t spn, u
     
     // Promote candidate faults to active if they meet the criteria
     for (size_t i = 0; i < candidate_faults_count; ++i) {
-        if ((timestamp - candidate_faults[i].first_seen <= debounce_fault_active_time) && //Check if is within the window time to become active
-            (candidate_faults[i].occurrences >= debounce_fault_active_count)) { // Check if has the minimum amount of occurrences
+        if ((timestamp - candidate_faults[i].first_seen <= fault_active_time_window) && //Check if is within the window time to become active
+            (candidate_faults[i].occurrences >= fault_active_count)) { // Check if has the minimum amount of occurrences
             add_active_fault(candidate_faults[i]);
             // Remove from candidates
             for (size_t j = i; j < candidate_faults_count - 1; ++j) {
