@@ -54,9 +54,9 @@ typedef struct {
 } MultiFrameMessage;
 
 /**
- * @brief Callback type for active faults
+ * @brief Callback type for active faults updated
  */
-typedef void (*ActiveFaultsCallback)(const Fault* active_faults, const size_t active_faults_count);
+typedef void (*UpdatedActiveFaultsCallback)(const Fault* active_faults, const size_t active_faults_count);
 
 /**
  * @brief Sets the debounce times for faults
@@ -69,11 +69,11 @@ typedef void (*ActiveFaultsCallback)(const Fault* active_faults, const size_t ac
 void set_j1939_fault_debounce(uint32_t _fault_active_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_);
 
 /**
- * @brief Registers a callback function for active fault notifications
+ * @brief Registers a callback function for active fault updated notifications
  *
  * @param callback Callback function to be called when active faults are updated
  */
-void register_j1939_faults_callback(ActiveFaultsCallback callback);
+void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback);
 
 /**
  * @brief Processes a CAN message and updates faults

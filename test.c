@@ -71,7 +71,7 @@ void process_asc_file(const char* file_path) {
 
 int main() {
     // Register callback
-    register_j1939_faults_callback(active_faults_callback);
+    register_j1939_updated_faults_callback(active_faults_callback);
 
     // Set debounce times
     set_j1939_fault_debounce(10, 10, 10, 5);

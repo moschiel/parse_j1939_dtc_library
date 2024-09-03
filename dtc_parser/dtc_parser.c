@@ -37,7 +37,7 @@ static uint32_t fault_active_count = 3;
 static uint32_t fault_active_time_window = 10;
 static uint32_t debounce_fault_inactive_time = 20;
 static uint32_t timeout_multi_frame = 5;
-static ActiveFaultsCallback active_faults_callback = NULL;
+static UpdatedActiveFaultsCallback updated_active_faults_callback = NULL;
 static uint8_t changedFaultList = 0;
 
 // Private function prototypes
@@ -53,52 +53,6 @@ static MultiFrameMessage* find_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_multi_frame_message(uint32_t message_id_tp_dt);
 static void remove_incomplete_multi_frame_message(uint32_t timestamp);
 
-void set_j1939_fault_debounce(uint32_t _fault_active_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_) {
-    fault_active_count = _fault_active_count_;
-    fault_active_time_window = _fault_active_time_window_;
-    debounce_fault_inactive_time = _debounce_fault_inactive_time_;
-    timeout_multi_frame = _timeout_multi_frame_;
-}
-
-void register_j1939_faults_callback(ActiveFaultsCallback callback) {
-    active_faults_callback = callback;
-}
-
-void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
-    if ((can_id & 0x00FFFF00) == 0x00FECA00) { // single frame DM1 message
-        #if PRINT_DM1_FRAME
-        printf("[%u] DM1_FRAME -> ID: %08X, Data: %02X %02X %02X %02X %02X %02X %02X %02X\n",
-            timestamp,
-            can_id, 
-            data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
-        #endif
-        process_dm1_message(can_id, data, 8, timestamp);
-    } 
-    else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
-        handle_tp_cm_message(can_id, data, timestamp);
-    } 
-    else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
-        handle_tp_dt_message(can_id, data, timestamp);
-    }
-}
-
-void print_j1939_faults(const Fault* list, const size_t count) {
-    for (size_t i = 0; i < count; ++i) {
-        const Fault* f = &list[i];
-        printf("LastSeen: %u, SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u, MIL: %u, RSL: %u, AWL: %u, PL: %u\n", 
-            f->last_seen, f->src, f->src, f->spn, f->spn, f->fmi, f->cm, f->oc, f->mil, f->rsl, f->awl, f->pl);
-    }
-}
-
-void check_j1939_faults(uint32_t timestamp) {
-    remove_inactive_faults(timestamp);
-    remove_incomplete_multi_frame_message(timestamp);
-    // Notify via callback
-    if (changedFaultList && active_faults_callback != NULL) {
-        changedFaultList = 0;
-        active_faults_callback(active_faults, active_faults_count);
-    }
-}
 
 // Private functions
 static void remove_inactive_faults(uint32_t timestamp) {
@@ -408,5 +362,53 @@ static void remove_incomplete_multi_frame_message(uint32_t timestamp) {
                 memset(&multi_frame_messages[i], 0, sizeof(MultiFrameMessage));
             }
         }
+    }
+}
+
+// Public functions
+void set_j1939_fault_debounce(uint32_t _fault_active_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_) {
+    fault_active_count = _fault_active_count_;
+    fault_active_time_window = _fault_active_time_window_;
+    debounce_fault_inactive_time = _debounce_fault_inactive_time_;
+    timeout_multi_frame = _timeout_multi_frame_;
+}
+
+void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback) {
+    updated_active_faults_callback = callback;
+}
+
+void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
+    if ((can_id & 0x00FFFF00) == 0x00FECA00) { // single frame DM1 message
+        #if PRINT_DM1_FRAME
+        printf("[%u] DM1_FRAME -> ID: %08X, Data: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+            timestamp,
+            can_id, 
+            data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+        #endif
+        process_dm1_message(can_id, data, 8, timestamp);
+    } 
+    else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
+        handle_tp_cm_message(can_id, data, timestamp);
+    } 
+    else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
+        handle_tp_dt_message(can_id, data, timestamp);
+    }
+}
+
+void print_j1939_faults(const Fault* list, const size_t count) {
+    for (size_t i = 0; i < count; ++i) {
+        const Fault* f = &list[i];
+        printf("LastSeen: %u, SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u, MIL: %u, RSL: %u, AWL: %u, PL: %u\n", 
+            f->last_seen, f->src, f->src, f->spn, f->spn, f->fmi, f->cm, f->oc, f->mil, f->rsl, f->awl, f->pl);
+    }
+}
+
+void check_j1939_faults(uint32_t timestamp) {
+    remove_inactive_faults(timestamp);
+    remove_incomplete_multi_frame_message(timestamp);
+    // Notify via callback
+    if (changedFaultList && updated_active_faults_callback != NULL) {
+        changedFaultList = 0;
+        updated_active_faults_callback(active_faults, active_faults_count);
     }
 }
