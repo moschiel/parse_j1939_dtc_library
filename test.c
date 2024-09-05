@@ -16,10 +16,13 @@
 #include <math.h>
 
 #define MAX_LINE_LENGTH 256
+#define TEST_FAULTS_CALLBACK 1
+#define TEST_FAULTS_COPY 0
+#define TEST_FAULTS_DYNAMIC_COPY 0
 
 void active_faults_callback(const Fault* active_faults, const size_t active_faults_count) {
-    //printf("Active Faults Updated:\n");
-    //print_j1939_faults(active_faults, active_faults_count);
+    printf("TEST Active Faults Callback: %i\n", active_faults_count);
+    print_j1939_faults(active_faults, active_faults_count);
 }
 
 void process_asc_file(const char* file_path) {
@@ -60,8 +63,33 @@ void process_asc_file(const char* file_path) {
 
             //Check if it has passed 1 second
             if(timestamp - last_timestamp >= 1) {
-                check_j1939_faults(timestamp); // 'check_faults' must be called periodically by the user's application
                 last_timestamp = timestamp;
+                
+                // 'check_faults' MUST be called once per second by the user's application 
+                // in order to remove inactive faults and verify if faults list was changed
+                bool faults_changed = check_j1939_faults(timestamp); 
+                
+                if(faults_changed) {
+                    #if TEST_FAULTS_COPY
+                    Fault faults_copy[MAX_ACTIVE_FAULTS];
+                    uint8_t faults_copy_count = 0;
+                    if(copy_j1939_faults(faults_copy, sizeof(faults_copy), &faults_copy_count)) {
+                        printf("TEST Active Faults Copy: %i\n", faults_copy_count);
+                        print_j1939_faults(faults_copy, faults_copy_count);
+                    }
+                    #endif
+
+                    #if TEST_FAULTS_DYNAMIC_COPY
+                    Fault *faults_dynamic = NULL;
+                    uint8_t faults_dynamic_count = 0;
+                    if(dynamic_copy_j1939_faults(&faults_dynamic, &faults_dynamic_count)) {
+                        printf("TEST Active Faults Dynamic Copy: %i\n", faults_dynamic_count);
+                        print_j1939_faults(faults_dynamic, faults_dynamic_count);
+                        free(faults_dynamic);
+                    }
+                    #endif
+                }
+                
             }
         }
     }
@@ -70,8 +98,10 @@ void process_asc_file(const char* file_path) {
 }
 
 int main() {
+    #if TEST_FAULTS_CALLBACK
     // Register callback
     register_j1939_updated_faults_callback(active_faults_callback);
+    #endif
 
     // Set debounce times
     set_j1939_fault_debounce(10, 10, 10, 5);

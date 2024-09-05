@@ -2,11 +2,25 @@
  * @file dtc_parser.c
  * @brief Source file for the DTC parser library
  *
- * This library parses J1939 Diagnostic Trouble Code (DTC) messages from CAN frames.
- * It manages active and inactive faults and supports multi-frame messages.
+ * This library is designed to parse J1939 Diagnostic Trouble Code (DTC) messages from CAN frames.
+ * It manages the detection and tracking of faults by maintaining lists of candidate 
+ * and active faults. The library can handle both single-frame and 
+ * multi-frame DTC messages (using the BAM transport protocol). It is optimized for use within 
+ * a CAN interrupt handler, with built-in mutex protection to ensure safe concurrent access 
+ * to the fault list. If the fault list is being accessed when a new DTC frame arrives, the 
+ * library will skip processing that frame to avoid concurrency issues, accepting the possibility 
+ * of missing some frames for the sake of system stability.
  * 
+ * Key features include:
+ * - Parse J1939 DTC messages (single and multi-frame).
+ * - Maintain active and candidate fault lists.
+ * - Mutex-protected access to fault lists, suitable for use in interrupts.
+ * - Debouncing mechanism to handle fault transition from 'candidate' to 'active'.
+ * - Debouncing mechanism to handle fault removal once it is considered 'inactive'.
+ * - Customizable fault handling with user-defined callback functions.
+ *
  * @authored by Roger da Silva Moschiel
- * @date 2024
+ * @date 1 August 2024
  */
 
 #include "dtc_parser.h"
@@ -23,8 +37,8 @@
 #define PRINT_TP_DT_PARSED 0
 #define PRINT_TP_DT_INCORRECT_ORDER 0
 #define PRINT_TP_CONCAT_MULTI_FRAME 0
-#define PRINT_NEW_AND_REMOVED_DTC 1
-#define PRINT_WARNINGS 1
+#define PRINT_NEW_AND_REMOVED_DTC 0
+#define PRINT_WARNINGS 0
 
 
 // Private variables
@@ -38,7 +52,8 @@ static uint32_t fault_active_time_window = 10;
 static uint32_t debounce_fault_inactive_time = 20;
 static uint32_t timeout_multi_frame = 5;
 static UpdatedActiveFaultsCallback updated_active_faults_callback = NULL;
-static uint8_t changedFaultList = 0;
+static bool changedFaultList = false;
+static bool faultListMutexTaken = false;
 
 // Private function prototypes
 static void remove_inactive_faults(uint32_t timestamp);
@@ -55,6 +70,16 @@ static void remove_incomplete_multi_frame_message(uint32_t timestamp);
 
 
 // Private functions
+static bool take_j1939_faults_mutex() {
+    if(faultListMutexTaken) return false;
+    faultListMutexTaken = true;
+    return true;
+}
+
+static void give_j1939_faults_mutex() {
+    faultListMutexTaken = false;
+}
+
 static void remove_inactive_faults(uint32_t timestamp) {
     // Check candidate faults to be removed
     for (size_t i = 0; i < candidate_faults_count; ++i) {
@@ -74,7 +99,7 @@ static void remove_inactive_faults(uint32_t timestamp) {
             #if PRINT_NEW_AND_REMOVED_DTC
             Fault f = active_faults[i];
             printf("[%u] Removed fault -> SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, LastSeen: %u\n",
-                timestamp, f.src, f.src, f.spn, f.spn, f.fmi, f.last_seen);
+                timestamp, f.dtc.src, f.dtc.src, f.dtc.spn, f.dtc.spn, f.dtc.fmi, f.last_seen);
             #endif
 
             // Shift remaining faults
@@ -83,7 +108,7 @@ static void remove_inactive_faults(uint32_t timestamp) {
             }
             --active_faults_count;
             --i; // recheck the current index
-            changedFaultList = 1;
+            changedFaultList = true;
         }
     }
 }
@@ -98,14 +123,14 @@ static void add_candidate_fault(Fault fault) {
     }
 }
 
-static void add_active_fault(Fault fault) {
+static void add_active_fault(Fault f) {
     if (active_faults_count < MAX_ACTIVE_FAULTS) {
-        active_faults[active_faults_count++] = fault;
-        changedFaultList = 1;
+        active_faults[active_faults_count++] = f;
+        changedFaultList = true;
 
         #if PRINT_NEW_AND_REMOVED_DTC
         printf("[%u] New fault -> SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u\n",
-            fault.last_seen, fault.src, fault.src, fault.spn, fault.spn, fault.fmi);
+            f.last_seen, f.dtc.src, f.dtc.src, f.dtc.spn, f.dtc.spn, f.dtc.fmi);
         #endif
     } else {
         #if PRINT_WARNINGS
@@ -116,7 +141,7 @@ static void add_active_fault(Fault fault) {
 
 static Fault* find_fault(Fault* list, size_t count, uint32_t src, uint32_t spn, uint32_t fmi) {
     for (size_t i = 0; i < count; ++i) {
-        if (list[i].src == src && list[i].spn == spn && list[i].fmi == fmi) {
+        if (list[i].dtc.src == src && list[i].dtc.spn == spn && list[i].dtc.fmi == fmi) {
             return &list[i];
         }
     }
@@ -127,38 +152,38 @@ static void update_fault_status(uint32_t timestamp, uint8_t src, uint32_t spn, u
     Fault* existing_fault = find_fault(active_faults, active_faults_count, src, spn, fmi);
     if (existing_fault) {
         // Update if exist on Active list already
-        existing_fault->oc = oc;
-        existing_fault->mil = mil;
-        existing_fault->rsl = rsl;
-        existing_fault->awl = awl;
-        existing_fault->pl = pl;
+        existing_fault->dtc.oc = oc;
+        existing_fault->dtc.mil = mil;
+        existing_fault->dtc.rsl = rsl;
+        existing_fault->dtc.awl = awl;
+        existing_fault->dtc.pl = pl;
         existing_fault->last_seen = timestamp;
     } else {
         existing_fault = find_fault(candidate_faults, candidate_faults_count, src, spn, fmi);
         if (existing_fault) {
             // Update if exist on Candidate list already
-            existing_fault->oc = oc;
-            existing_fault->mil = mil;
-            existing_fault->rsl = rsl;
-            existing_fault->awl = awl;
-            existing_fault->pl = pl;
-            existing_fault->occurrences += 1;
+            existing_fault->dtc.oc = oc;
+            existing_fault->dtc.mil = mil;
+            existing_fault->dtc.rsl = rsl;
+            existing_fault->dtc.awl = awl;
+            existing_fault->dtc.pl = pl;
+            existing_fault->read_count += 1;
             existing_fault->last_seen = timestamp;
         } else {
             // Add new candidate fault to the fault list
             Fault new_fault = {
-                .src = src, 
-                .spn = spn, 
-                .fmi = fmi, 
-                .cm = cm, 
-                .oc = oc, 
-                .mil = mil, 
-                .rsl = rsl, 
-                .awl = awl, 
-                .pl = pl, 
+                .dtc.src = src, 
+                .dtc.spn = spn, 
+                .dtc.fmi = fmi, 
+                .dtc.cm = cm, 
+                .dtc.oc = oc, 
+                .dtc.mil = mil, 
+                .dtc.rsl = rsl, 
+                .dtc.awl = awl, 
+                .dtc.pl = pl, 
                 .first_seen = timestamp, 
                 .last_seen = timestamp, 
-                .occurrences = 1
+                .read_count = 1
             };    
             add_candidate_fault(new_fault);
         }
@@ -167,7 +192,7 @@ static void update_fault_status(uint32_t timestamp, uint8_t src, uint32_t spn, u
     // Promote candidate faults to active if they meet the criteria
     for (size_t i = 0; i < candidate_faults_count; ++i) {
         if ((timestamp - candidate_faults[i].first_seen <= fault_active_time_window) && //Check if is within the window time to become active
-            (candidate_faults[i].occurrences >= fault_active_count)) { // Check if has the minimum amount of occurrences
+            (candidate_faults[i].read_count >= fault_active_count)) { // Check if has the minimum amount of read_count
             add_active_fault(candidate_faults[i]);
             // Remove from candidates
             for (size_t j = i; j < candidate_faults_count - 1; ++j) {
@@ -217,8 +242,8 @@ static void process_dm1_message(uint32_t can_id, uint8_t* data, uint32_t length,
 }
 
 static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
-    uint32_t pgn = (data[7] << 16) | (data[6] << 8) | data[5];
-    if (pgn != 0xFECA) return; //If it is not a DTC multiframe, return
+    //uint32_t pgn = (data[7] << 16) | (data[6] << 8) | data[5];
+    //if (pgn != 0xFECA) return; //If it is not a DTC multiframe, return
 
     uint32_t message_id = can_id & 0x1FFFFFFF;
     uint8_t control_byte = data[0];
@@ -385,30 +410,81 @@ void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestam
             can_id, 
             data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
         #endif
-        process_dm1_message(can_id, data, 8, timestamp);
+        if(take_j1939_faults_mutex()) {
+            process_dm1_message(can_id, data, 8, timestamp);
+            give_j1939_faults_mutex();
+        }
     } 
     else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
-        handle_tp_cm_message(can_id, data, timestamp);
+        uint32_t pgn = (data[7] << 16) | (data[6] << 8) | data[5];
+        if(pgn == 0xFECA) { // if is DTC multiframe
+            uint8_t control_byte = data[0];
+            if (control_byte == 0x20) { // BAM message
+                if(take_j1939_faults_mutex()) {
+                    handle_tp_cm_message(can_id, data, timestamp);
+                    give_j1939_faults_mutex();
+                }
+            }
+        }
     } 
     else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
-        handle_tp_dt_message(can_id, data, timestamp);
+        if(take_j1939_faults_mutex()) {
+            handle_tp_dt_message(can_id, data, timestamp);
+            give_j1939_faults_mutex();
+        }
     }
 }
 
 void print_j1939_faults(const Fault* list, const size_t count) {
     for (size_t i = 0; i < count; ++i) {
-        const Fault* f = &list[i];
+        const Fault *f = &list[i];
         printf("LastSeen: %u, SRC: 0x%02X (%u), SPN: 0x%X (%u), FMI: %u, CM: %u, OC: %u, MIL: %u, RSL: %u, AWL: %u, PL: %u\n", 
-            f->last_seen, f->src, f->src, f->spn, f->spn, f->fmi, f->cm, f->oc, f->mil, f->rsl, f->awl, f->pl);
+            f->last_seen, f->dtc.src, f->dtc.src, f->dtc.spn, f->dtc.spn, f->dtc.fmi, f->dtc.cm, f->dtc.oc, f->dtc.mil, f->dtc.rsl, f->dtc.awl, f->dtc.pl);
     }
 }
 
-void check_j1939_faults(uint32_t timestamp) {
-    remove_inactive_faults(timestamp);
-    remove_incomplete_multi_frame_message(timestamp);
-    // Notify via callback
-    if (changedFaultList && updated_active_faults_callback != NULL) {
-        changedFaultList = 0;
-        updated_active_faults_callback(active_faults, active_faults_count);
+bool check_j1939_faults(uint32_t timestamp) {
+    bool ret = false; 
+    if(take_j1939_faults_mutex()) {
+        remove_inactive_faults(timestamp);
+        remove_incomplete_multi_frame_message(timestamp);
+        
+        if(changedFaultList) {
+            // Notify if configured callback function
+            if (updated_active_faults_callback != NULL) {
+                updated_active_faults_callback(active_faults, active_faults_count);
+            }
+            changedFaultList = false;
+            ret = true;
+        }
+        give_j1939_faults_mutex();
     }
+    return ret;
+}
+
+bool copy_j1939_faults(Fault* buf_faults_list, uint16_t buf_size, uint8_t* faults_count) {
+    if(take_j1939_faults_mutex()) {
+        uint16_t faultRequiredBufSize = active_faults_count * sizeof(Fault);
+        if(buf_size >= faultRequiredBufSize) {
+            memcpy((void*)buf_faults_list, (void*)active_faults, faultRequiredBufSize);
+            *faults_count = active_faults_count;
+            give_j1939_faults_mutex();
+            return true;
+        }
+    }
+    return false;
+}
+
+bool dynamic_copy_j1939_faults(Fault **buf_faults_list, uint8_t* faults_count) {
+    if(take_j1939_faults_mutex()) {
+        *buf_faults_list = (Fault*)malloc(active_faults_count * sizeof(Fault));
+        if(*buf_faults_list != NULL) {
+            memcpy((void*)*buf_faults_list, (void*)active_faults, active_faults_count * sizeof(Fault));
+            *faults_count = active_faults_count;
+            give_j1939_faults_mutex();
+            return true;
+        }
+        give_j1939_faults_mutex();
+    }
+    return false;
 }
