@@ -1,5 +1,5 @@
 /**
- * @file test_dtc_parser.c
+ * @file test.c
  * @brief Test application for the DTC parser library
  *
  * This application simulates the reading of CAN frames and uses the DTC parser library to process them.
