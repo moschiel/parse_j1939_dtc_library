@@ -35,19 +35,12 @@ The library is optimized for use in bare-metal microcontroller systems, where it
 - GCC or another C compiler
 - CANalyzer log files in `.ASC` format (provided in the `canalyzer_logs` folder)
 
-### Compilation
+### Build
 
-To compile the test application that uses the J1939 DTC parser library, run the following command:
+To compile and build the test application that uses the J1939 DTC parser library, run the following command:
 
 ```bash
 gcc -o test test.c dtc_parser/dtc_parser.c
 ```
 
-### Running the Application
-
-Execute the command:
-
-```bash
-./test
-```
-
+After running the command, a a file named `test.exe` will be available to be executed.
