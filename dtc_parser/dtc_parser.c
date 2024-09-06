@@ -295,7 +295,7 @@ static void handle_tp_cm_message(uint32_t can_id, uint8_t data[8], uint32_t time
         // Store on memory if slot available
         if (k >= 0) {
             multi_frame_messages[k].message_id = message_id;
-            multi_frame_messages[k].message_id_tp_dt = (message_id & 0xFF00FFFF) | 0xEB0000; // TP.DT version of the TP.CM message
+            multi_frame_messages[k].message_id_tp_dt = (message_id & 0xFF00FFFF) | 0x00EB0000; // TP.DT version of the TP.CM message
             multi_frame_messages[k].total_size = total_size;
             multi_frame_messages[k].num_packets = num_packets;
             multi_frame_messages[k].received_packets = 0;
@@ -405,35 +405,29 @@ void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback
 }
 
 void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp) {
-    if ((can_id & 0x00FFFF00) == 0x00FECA00) { // single frame DM1 message
-        #if PRINT_DM1_FRAME
-        printf("[%u] DM1_FRAME -> ID: %08X, Data: %02X %02X %02X %02X %02X %02X %02X %02X\n",
-            timestamp,
-            can_id, 
-            data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
-        #endif
-        if(take_j1939_faults_mutex()) {
+    if(take_j1939_faults_mutex()) {
+        if ((can_id & 0x00FFFF00) == 0x00FECA00) { // single frame DM1 message
+            #if PRINT_DM1_FRAME
+            printf("[%u] DM1_FRAME -> ID: %08X, Data: %02X %02X %02X %02X %02X %02X %02X %02X\n",
+                timestamp,
+                can_id, 
+                data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+            #endif
             process_dm1_message(can_id, data, 8, timestamp);
-            give_j1939_faults_mutex();
-        }
-    } 
-    else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
-        uint32_t pgn = (data[7] << 16) | (data[6] << 8) | data[5];
-        if(pgn == 0xFECA) { // if is DTC multiframe
-            uint8_t control_byte = data[0];
-            if (control_byte == 0x20) { // BAM message
-                if(take_j1939_faults_mutex()) {
+        } 
+        else if ((can_id & 0x00FF0000) == 0x00EC0000) { // multi frame message
+            uint32_t pgn = (data[7] << 16) | (data[6] << 8) | data[5];
+            if(pgn == 0xFECA) { // if is DTC multiframe
+                uint8_t control_byte = data[0];
+                if (control_byte == 0x20) { // BAM message
                     handle_tp_cm_message(can_id, data, timestamp);
-                    give_j1939_faults_mutex();
                 }
             }
+        } 
+        else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
+            handle_tp_dt_message(can_id, data, timestamp);  
         }
-    } 
-    else if ((can_id & 0x00FF0000) == 0x00EB0000) { // multi frame data
-        if(take_j1939_faults_mutex()) {
-            handle_tp_dt_message(can_id, data, timestamp);
-            give_j1939_faults_mutex();
-        }
+        give_j1939_faults_mutex();
     }
 }
 
