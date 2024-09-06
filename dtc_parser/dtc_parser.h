@@ -75,6 +75,16 @@ typedef struct {
 } MultiFrameMessage;
 
 /**
+ * @brief Struct for debounces logic
+ */
+typedef struct  {
+    uint32_t fault_active_read_count;       // Number of read_count that must occur within a time window for a fault to become active
+    uint32_t fault_active_time_window;      // Time window for a fault to become active (in seconds)
+    uint32_t debounce_fault_inactive_time;  // Remove faults that have not been updated by this amount of time (seconds)
+    uint32_t timeout_multi_frame;           // Maximum time to receive a complete multiframe message, otherwise discards the message
+} DtcParseConfig_t;
+
+/**
  * @brief Callback type for active faults updated
  */
 typedef void (*UpdatedActiveFaultsCallback)(const Fault* active_faults, const size_t active_faults_count);
@@ -82,12 +92,12 @@ typedef void (*UpdatedActiveFaultsCallback)(const Fault* active_faults, const si
 /**
  * @brief Sets the debounce times for faults
  *
- * @param _fault_active_count_ Number of read_count that must occur within a time window for a fault to become active
+ * @param _fault_active_read_count_ Number of read_count that must occur within a time window for a fault to become active
  * @param _fault_active_time_window_ Time window for a fault to become active (in seconds)
  * @param _debounce_fault_inactive_time_ Remove faults that have not been updated by this amount of time (seconds)
  * @param _timeout_multi_frame_ Maximum time to receive a complete multiframe message, otherwise discards the message
  */
-void set_j1939_fault_debounce(uint32_t _fault_active_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_);
+void set_j1939_fault_debounce(uint32_t _fault_active_read_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_);
 
 /**
  * @brief Registers a callback function for active fault updated notifications
@@ -114,7 +124,7 @@ void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback
 void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestamp);
 
 /**
- * @brief Check faults, must be called once per second by the user's application
+ * @brief Check faults, *MUST* be called once per second by the user's application
  *
  * This function removes any inactive fault and checks for any changes in the fault list. 
  * It returns `true` if the fault list was updated, and `false` if there were no changes.

@@ -5,7 +5,7 @@
  * This application simulates the reading of CAN frames and uses the DTC parser library to process them.
  * 
  * @authored by Roger da Silva Moschiel
- * @date 2024
+ * @date 1 August 2024
  */
 
 #include "dtc_parser/dtc_parser.h"
@@ -16,9 +16,10 @@
 #include <math.h>
 
 #define MAX_LINE_LENGTH 256
-#define TEST_FAULTS_CALLBACK 1
-#define TEST_FAULTS_COPY 0
-#define TEST_FAULTS_DYNAMIC_COPY 0
+//There are 3 different methods for reading the current faults list:
+#define TEST_FAULTS_CALLBACK 1      // Test fault callback notification to get the faults list whenever it has changed
+#define TEST_FAULTS_COPY 0          // Test fault copy that is triggered when 'check_j1939_faults' returns 'true'
+#define TEST_FAULTS_DYNAMIC_COPY 0  // Test fault dynamic copy that is triggered when 'check_j1939_faults' returns 'true'
 
 void active_faults_callback(const Fault* active_faults, const size_t active_faults_count) {
     printf("TEST Active Faults Callback: %i\n", active_faults_count);
