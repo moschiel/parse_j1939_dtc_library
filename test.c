@@ -18,8 +18,9 @@
 #define MAX_LINE_LENGTH 256
 //There are 3 different methods for reading the current faults list:
 #define TEST_FAULTS_CALLBACK 1      // Test fault callback notification to get the faults list whenever it has changed
-#define TEST_FAULTS_COPY 0          // Test fault copy that is triggered when 'check_j1939_faults' returns 'true'
-#define TEST_FAULTS_DYNAMIC_COPY 0  // Test fault dynamic copy that is triggered when 'check_j1939_faults' returns 'true'
+#define TEST_FAULTS_COPY 1          // Test fault copy that is triggered when 'check_j1939_faults' returns 'true'
+#define TEST_FAULTS_DYNAMIC_COPY 1  // Test fault dynamic copy that is triggered when 'check_j1939_faults' returns 'true'
+#define TEST_FAULTS_REFERENCE 1     // Test fault direct access that is triggered when 'check_j1939_faults' returns 'true'
 
 void active_faults_callback(const Fault* active_faults, const size_t active_faults_count) {
     printf("TEST Active Faults Callback: %i\n", active_faults_count);
@@ -88,6 +89,16 @@ void process_asc_file(const char* file_path) {
                         print_j1939_faults(faults_dynamic, faults_dynamic_count);
                         free(faults_dynamic);
                     }
+                    #endif
+
+                    #if TEST_FAULTS_REFERENCE
+                    if (take_j1939_faults_mutex()) {
+                        uint8_t faults_reference_count = 0;
+                        const Fault* faults_reference = get_reference_to_j1939_faults(&faults_reference_count);
+                        printf("TEST Active Faults Reference: %i\n", faults_reference_count);
+                        print_j1939_faults(faults_reference, faults_reference_count);
+                        give_j1939_faults_mutex();
+                    } 
                     #endif
                 }
                 

@@ -7,7 +7,7 @@
  * and active faults. The library can handle both single-frame and 
  * multi-frame DTC messages (using the BAM transport protocol). It is optimized for use within 
  * a CAN interrupt handler, with built-in mutex protection to ensure safe concurrent access 
- * to the fault list. If the fault list is being accessed when a new DTC frame arrives, the 
+ * to the fault list. If the fault list is being accessed when a new CAN frame arrives, the 
  * library will skip processing that frame to avoid concurrency issues, accepting the possibility 
  * of missing some frames for the sake of system stability.
  * 
@@ -90,6 +90,26 @@ typedef struct  {
 typedef void (*UpdatedActiveFaultsCallback)(const Fault* active_faults, const size_t active_faults_count);
 
 /**
+ * @brief Attempts to acquire the mutex protecting the fault list.
+ *
+ * This function attempts to take the mutex to provide exclusive access to the fault list. 
+ * If the mutex is already taken, the function returns `false`, indicating that access 
+ * to the fault list is not available. The user should always pair this function with 
+ * `give_j1939_faults_mutex` to ensure the mutex is properly released.
+ *
+ * @return bool True if the mutex was successfully taken, false if the mutex is already occupied.
+ */
+bool take_j1939_faults_mutex(void);
+
+/**
+ * @brief Releases the mutex protecting the fault list.
+ *
+ * This function releases the mutex, allowing other parts of the program to access the fault list. 
+ * It should always be called after a successful call to `take_j1939_faults_mutex`.
+ */
+void give_j1939_faults_mutex(void);
+
+/**
  * @brief Sets the debounce times for faults
  *
  * @param _fault_active_read_count_ Number of read_count that must occur within a time window for a fault to become active
@@ -100,11 +120,29 @@ typedef void (*UpdatedActiveFaultsCallback)(const Fault* active_faults, const si
 void set_j1939_fault_debounce(uint32_t _fault_active_read_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_);
 
 /**
- * @brief Registers a callback function for active fault updated notifications
+ * @brief Registers a callback function to be notified when the active fault list is updated, it has a built-in mutex protection
  *
- * @param callback Callback function to be called when active faults are updated
+ * This function allows the user to register a callback that will be invoked whenever the 
+ * active fault list changes (e.g., when a new fault is added or an existing fault is removed).
+ * The callback function is called with a pointer to the current list of active faults and 
+ * the number of active faults. The library ensures thread safety by managing the mutex 
+ * internally: before invoking the callback, it acquires the mutex protecting the fault list 
+ * and releases it after the callback has returned.
+ *
+ * The user does not need to manually handle mutexes when using this callback mechanism, as 
+ * the library automatically handles concurrency to prevent race conditions.
+ * 
+ * While the callback is executing, the mutex is held. This means that if a CAN frame arrives 
+ * during the callback execution (e.g., via `process_j1939_dtc_frame` in an CAN Interrupt Service Routine), the frame 
+ * will be discarded because the mutex is occupied. Therefore, it's important minimize the time the callback is executed 
+ * to avoid potential frame losses.
+ *
+ * @param callback The user-defined function to be called when the active fault list is updated. 
+ *                 The callback function should accept two parameters: a pointer to the active 
+ *                 fault list (`const Fault*`) and the number of active faults (`size_t`).
  */
 void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback);
+
 
 /**
  * @brief Processes a CAN message and updates faults, it has a built-in mutex protection
@@ -113,7 +151,7 @@ void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback
  * microcontroller. It uses a mutex to prevent concurrent access to the fault list. If 
  * the fault list is currently being accessed elsewhere and the mutex is occupied, this 
  * function will skip processing the frame to avoid concurrency issues. The user must 
- * be aware that skipping a frame could result in missing a fault frame, but it is 
+ * be aware that skipping a CAN frame could result in missing a fault frame, but it is 
  * necessary to maintain concurrence safety in a bare-metal environment.
  *
  * @param can_id CAN message ID
@@ -172,5 +210,41 @@ bool copy_j1939_faults(Fault* buf_faults_list, uint16_t buf_size, uint8_t* fault
  * @return bool True if the faults were successfully copied and memory was allocated, false if allocation failed or the mutex was not available
  */
 bool dynamic_copy_j1939_faults(Fault **buf_faults_list, uint8_t* faults_count);
+
+/**
+ * @brief Retrieves a constant pointer to the current list of active faults.
+ *
+ * This function provides a direct reference to the internal list of active faults. The returned 
+ * pointer is constant, meaning that the user should not attempt to modify its contents. However, 
+ * it is important to note that this function provides access to a variable that may be modified 
+ * by the library, especially if the function `process_j1939_dtc_frame` is called within an 
+ * Interrupt Service Routine (ISR).
+ * 
+ * Users must ensure thread-safe access by utilizing `take_j1939_faults_mutex()` and 
+ * `give_j1939_faults_mutex()` to lock and unlock the fault list, respectively. Failure to do so 
+ * may result in race conditions where the content of the fault list changes unexpectedly while 
+ * being accessed.
+ * 
+ * While the mutex is held by the user, any call to `process_j1939_dtc_frame` 
+ * (e.g., from a CAN Interrupt Service Routine) will have its frame discarded to avoid concurrency issues. 
+ * Therefore, it is crucial to minimize the time the mutex is held to prevent 
+ * important CAN frames from being skipped.
+ *
+ * Example usage:
+ * @code
+ * if (take_j1939_faults_mutex()) {
+ *     uint8_t faults_count = 0;
+ *     const Fault* active_faults = get_reference_to_j1939_faults(&faults_count);
+ *     // Write here your code to safely access the active_faults list
+ *     // Don't take too long here, otherwise you may experience some CAN frame losses.
+ *     give_j1939_faults_mutex();
+ * }
+ * @endcode
+ * 
+ * @param faults_count Pointer to a variable where the number of active faults will be stored.
+ * @return const Fault* Pointer to the list of active faults.
+ */
+const Fault* get_reference_to_j1939_faults(uint8_t* faults_count);
+
 
 #endif // DTC_PARSER_H

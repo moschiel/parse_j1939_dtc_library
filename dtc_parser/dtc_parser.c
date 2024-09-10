@@ -72,16 +72,6 @@ static void remove_incomplete_multi_frame_message(uint32_t timestamp);
 
 
 // Private functions
-static bool take_j1939_faults_mutex() {
-    if(faultListMutexTaken) return false;
-    faultListMutexTaken = true;
-    return true;
-}
-
-static void give_j1939_faults_mutex() {
-    faultListMutexTaken = false;
-}
-
 static void remove_inactive_faults(uint32_t timestamp) {
     // Check candidate faults to be removed
     for (size_t i = 0; i < candidate_faults_count; ++i) {
@@ -393,6 +383,16 @@ static void remove_incomplete_multi_frame_message(uint32_t timestamp) {
 }
 
 // Public functions
+bool take_j1939_faults_mutex() {
+    if(faultListMutexTaken) return false;
+    faultListMutexTaken = true;
+    return true;
+}
+
+void give_j1939_faults_mutex() {
+    faultListMutexTaken = false;
+}
+
 void set_j1939_fault_debounce(uint32_t _fault_active_read_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_) {
     dtcParseCfg.fault_active_read_count = _fault_active_read_count_;
     dtcParseCfg.fault_active_time_window = _fault_active_time_window_;
@@ -483,4 +483,9 @@ bool dynamic_copy_j1939_faults(Fault **buf_faults_list, uint8_t* faults_count) {
         give_j1939_faults_mutex();
     }
     return false;
+}
+
+const Fault* get_reference_to_j1939_faults(uint8_t* faults_count) {
+    *faults_count = active_faults_count;
+    return (const Fault*)active_faults;
 }
