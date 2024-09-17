@@ -51,7 +51,7 @@ static UpdatedActiveFaultsCallback updated_active_faults_callback = NULL;
 static bool changedFaultList = false;
 static bool faultListMutexTaken = false;
 static DtcParseConfig_t dtcParseCfg = {
-    .fault_active_read_count = 3,
+    .fault_active_read_count = 10,
     .fault_active_time_window = 10,
     .debounce_fault_inactive_time = 20,
     .timeout_multi_frame = 5
@@ -394,10 +394,10 @@ void give_j1939_faults_mutex() {
 }
 
 void set_j1939_fault_debounce(uint32_t _fault_active_read_count_, uint32_t _fault_active_time_window_, uint32_t _debounce_fault_inactive_time_, uint32_t _timeout_multi_frame_) {
-    dtcParseCfg.fault_active_read_count = _fault_active_read_count_;
-    dtcParseCfg.fault_active_time_window = _fault_active_time_window_;
-    dtcParseCfg.debounce_fault_inactive_time = _debounce_fault_inactive_time_;
-    dtcParseCfg.timeout_multi_frame = _timeout_multi_frame_;
+    if(_fault_active_read_count_ > 0) dtcParseCfg.fault_active_read_count = _fault_active_read_count_;
+    if(_fault_active_time_window_ > 0) dtcParseCfg.fault_active_time_window = _fault_active_time_window_;
+    if(_debounce_fault_inactive_time_ > 0) dtcParseCfg.debounce_fault_inactive_time = _debounce_fault_inactive_time_;
+    if(_timeout_multi_frame_ > 0) dtcParseCfg.timeout_multi_frame = _timeout_multi_frame_;
 }
 
 void register_j1939_updated_faults_callback(UpdatedActiveFaultsCallback callback) {
@@ -456,6 +456,17 @@ bool check_j1939_faults(uint32_t timestamp) {
         give_j1939_faults_mutex();
     }
     return ret;
+}
+
+void clear_j1939_faults() {
+    if(take_j1939_faults_mutex()) {
+        candidate_faults_count = 0;
+        active_faults_count = 0;
+        memset((void*)candidate_faults, 0, sizeof(candidate_faults));
+        memset((void*)active_faults, 0, sizeof(active_faults));
+        memset((void*)multi_frame_messages, 0, sizeof(multi_frame_messages));
+        give_j1939_faults_mutex();
+    }
 }
 
 bool copy_j1939_faults(Fault* buf_faults_list, uint16_t buf_size, uint8_t* faults_count) {

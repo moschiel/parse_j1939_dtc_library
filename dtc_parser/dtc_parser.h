@@ -174,6 +174,11 @@ void process_j1939_dtc_frame(uint32_t can_id, uint8_t data[8], uint32_t timestam
 bool check_j1939_faults(uint32_t timestamp);
 
 /**
+ * @brief Clear faults
+ */
+void clear_j1939_faults();
+
+/**
  * @brief Prints the fault list
  *
  * @param list Fault list to be printed
