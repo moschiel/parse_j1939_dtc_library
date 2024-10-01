@@ -2,18 +2,18 @@
 
 ## Overview
 
-The **J1939 DTC Parser Library** is a C library designed to parse J1939 Diagnostic Trouble Code (DTC) messages from CAN frames. It processes both single-frame and multi-frame DTC messages using the BAM transport protocol and manages lists of candidate and active faults. 
+The **J1939 DTC Parser Library** is a C library designed to parse J1939 Diagnostic Trouble Code (DTC) messages from CAN frames. It processes both single-frame and multi-frame DTC messages using the BAM transport protocol and manages lists of candidate and active DTCs. 
 
-The library is optimized for use in bare-metal microcontroller systems, where it can be called within a CAN interrupt handler. To ensure thread safety, mutex protection is included. If a CAN frame arrives while the fault list is being accessed, the frame may be skipped to maintain system stability.
+The library is optimized for use in bare-metal microcontroller systems, where it can be called within a CAN interrupt handler. To ensure thread safety, mutex protection is included. If a CAN frame arrives while the DTC list is being accessed, the frame may be skipped to maintain system stability.
 
 ## Features
 
 - Parse both single-frame and multi-frame J1939 DTC messages.
-- Maintain lists of candidate and active faults.
-- Handle fault transitions using a debouncing mechanism.
-- Automatic removal of inactive faults after a configurable timeout.
-- Thread-safe access to fault lists with built-in mutex protection.
-- User-defined callback functions for when active faults are updated.
+- Maintain lists of candidate and active DTCs.
+- Handle DTC transitions using a debouncing mechanism.
+- Automatic removal of inactive DTCs after a configurable timeout.
+- Thread-safe access to DTC lists with built-in mutex protection.
+- User-defined callback functions for when active DTCs are updated.
 
 ## Project Structure
 ```shell
