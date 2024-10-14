@@ -14,6 +14,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <math.h>
+#include <time.h>
 
 #define MAX_LINE_LENGTH 256
 //There are 3 different methods for reading the current DTCs list:
@@ -21,6 +22,60 @@
 #define TEST_DTCS_COPY 1          // Test DTC copy that is triggered when 'check_dtcs' returns 'true'
 #define TEST_DTCS_DYNAMIC_COPY 1  // Test DTC dynamic copy that is triggered when 'check_dtcs' returns 'true'
 #define TEST_DTCS_REFERENCE 1     // Test DTC direct access that is triggered when 'check_dtcs' returns 'true'
+#define WRITE_JSON_LOG_FILE 1
+
+// Flag global para controlar se é a primeira execução
+bool is_first_execution = true;
+
+
+void write_dtcs_to_json_file(const DTC_Info_t* active_dtcs, const size_t active_dtc_count, int timestamp) {
+    // Buffer para armazenar a string da data/hora
+    char time_buffer[20];
+
+    // Obter o timestamp atual
+    time_t current_time = time(NULL);
+
+    // Somar o timestamp atual com o timestamp fornecido
+    time_t final_time = current_time + timestamp;
+
+    // Converter o timestamp final para o formato de data/hora legível
+    struct tm *time_info = localtime(&final_time);
+    strftime(time_buffer, sizeof(time_buffer), "%Y-%m-%d %H:%M:%S", time_info);
+
+        // Se for a primeira execução, deletar o arquivo, se ele existir
+    if (is_first_execution) {
+        // Deletar o arquivo
+        remove("dtcs_log.txt");
+        // Marcar que a primeira execução já ocorreu
+        is_first_execution = false;
+    }
+    
+    // Abrir o arquivo no modo de anexo
+    FILE* file = fopen("dtcs_log.txt", "a");
+    if (file == NULL) {
+        printf("Erro ao abrir o arquivo.\n");
+        return;
+    }
+
+    // Escrever os dados no formato JSON
+    fprintf(file, "{ data_pacote: '%s', dtcs: [ ", time_buffer);
+
+    for (size_t i = 0; i < active_dtc_count; i++) {
+        fprintf(file, "{ src: %u, spn: %u, fmi: %u }",
+                active_dtcs[i].dtc.src,
+                active_dtcs[i].dtc.spn,
+                active_dtcs[i].dtc.fmi);
+
+        if (i < active_dtc_count - 1) {
+            fprintf(file, ", "); // Adicionar vírgula entre os DTCs, exceto o último
+        }
+    }
+
+    fprintf(file, " ] },\n");
+
+    // Fechar o arquivo
+    fclose(file);
+}
 
 void active_dtcs_callback(const DTC_Info_t* active_dtcs, const size_t active_dtc_count) {
     printf("TEST Active DTCs Callback: %i\n", active_dtc_count);
@@ -78,6 +133,9 @@ void process_asc_file(const char* file_path) {
                     if(copy_dtcs(dtcs_copy, sizeof(dtcs_copy), &dtc_copy_count)) {
                         printf("TEST Active DTCs Copy: %i\n", dtc_copy_count);
                         print_dtcs(dtcs_copy, dtc_copy_count);
+                        #if WRITE_JSON_LOG_FILE
+                        write_dtcs_to_json_file(dtcs_copy, dtc_copy_count, timestamp);
+                        #endif
                     }
                     #endif
 
@@ -116,7 +174,7 @@ int main() {
     #endif
 
     // Set debounce times
-    set_dtc_filtering(10, 10, 10, 5);
+    set_dtc_filtering(5, 5, 5, 5);
 
     // Process the .asc file
     // const char* file_path = "canalyzer_logs/test.asc";
